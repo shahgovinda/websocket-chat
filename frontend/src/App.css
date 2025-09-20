@@ -1,22 +1,28 @@
 @import "tailwindcss";
 
 /* Custom scrollbar */
-::-webkit-scrollbar {
+.custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
 
-::-webkit-scrollbar-track {
+.custom-scrollbar::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 
-::-webkit-scrollbar-thumb {
+.custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
+}
+
+/* Firefox scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
 }
 
 /* Smooth animations */
@@ -33,6 +39,9 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
 }
 
 /* Message animations */
@@ -121,4 +130,143 @@ body {
 
 .pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Responsive design improvements */
+@media (max-width: 768px) {
+  .max-w-4xl {
+    max-width: 100%;
+  }
+  
+  .h-\[95vh\] {
+    height: 100vh;
+  }
+  
+  .p-4 {
+    padding: 0.5rem;
+  }
+  
+  .p-6 {
+    padding: 1rem;
+  }
+  
+  .space-x-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-left: 0.75rem;
+  }
+  
+  .text-xl {
+    font-size: 1.125rem;
+  }
+  
+  .max-w-\[75\%\] {
+    max-width: 90%;
+  }
+}
+
+@media (max-width: 480px) {
+  .rounded-2xl {
+    border-radius: 1rem;
+  }
+  
+  .p-8 {
+    padding: 1.5rem;
+  }
+  
+  .text-2xl {
+    font-size: 1.5rem;
+  }
+  
+  .w-16 {
+    width: 3rem;
+  }
+  
+  .h-16 {
+    height: 3rem;
+  }
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Improved hover states */
+.hover\:scale-\[1\.02\]:hover {
+  transform: scale(1.02);
+}
+
+.hover\:scale-105:hover {
+  transform: scale(1.05);
+}
+
+.active\:scale-\[0\.98\]:active {
+  transform: scale(0.98);
+}
+
+.active\:scale-95:active {
+  transform: scale(0.95);
+}
+
+/* Text truncation utilities */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Improved backdrop blur support */
+@supports not (backdrop-filter: blur(10px)) {
+  .backdrop-blur-xl {
+    background-color: rgba(255, 255, 255, 0.8);
+  }
+  
+  .backdrop-blur-sm {
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .bg-white\/10 {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  .border-white\/20 {
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+  
+  .text-white\/70 {
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .animate-bounce,
+  .animate-pulse,
+  .animate-spin {
+    animation: none;
+  }
 }
