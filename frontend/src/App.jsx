@@ -4,25 +4,48 @@ import { connectWS } from './ws';
 export default function App() {
     const timer = useRef(null);
     const socket = useRef(null);
+    const messagesEndRef = useRef(null);
     const [userName, setUserName] = useState('');
     const [showNamePopup, setShowNamePopup] = useState(true);
     const [inputName, setInputName] = useState('');
     const [typers, setTypers] = useState([]);
+    const [onlineUsers, setOnlineUsers] = useState(1);
+    const [isConnected, setIsConnected] = useState(false);
 
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState('');
+
+    // Auto scroll to bottom
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     useEffect(() => {
         socket.current = connectWS();
 
         socket.current.on('connect', () => {
+            setIsConnected(true);
+            
             socket.current.on('roomNotice', (userName) => {
                 console.log(`${userName} joined to group!`);
+                setOnlineUsers(prev => prev + 1);
+                
+                // Add system message
+                const systemMsg = {
+                    id: Date.now(),
+                    sender: 'System',
+                    text: `${userName} joined the chat`,
+                    ts: Date.now(),
+                    isSystem: true
+                };
+                setMessages(prev => [...prev, systemMsg]);
             });
 
             socket.current.on('chatMessage', (msg) => {
-                // push to existing messages list
-                console.log('msg', msg);
                 setMessages((prev) => [...prev, msg]);
             });
 
@@ -32,7 +55,6 @@ export default function App() {
                     if (!isExist) {
                         return [...prev, userName];
                     }
-
                     return prev;
                 });
             });
@@ -42,22 +64,30 @@ export default function App() {
             });
         });
 
+        socket.current.on('disconnect', () => {
+            setIsConnected(false);
+        });
+
         return () => {
             socket.current.off('roomNotice');
             socket.current.off('chatMessage');
             socket.current.off('typing');
             socket.current.off('stopTyping');
+            socket.current.off('connect');
+            socket.current.off('disconnect');
         };
     }, []);
 
     useEffect(() => {
-        if (text) {
+        if (text && userName) {
             socket.current.emit('typing', userName);
             clearTimeout(timer.current);
         }
 
         timer.current = setTimeout(() => {
-            socket.current.emit('stopTyping', userName);
+            if (userName) {
+                socket.current.emit('stopTyping', userName);
+            }
         }, 1000);
 
         return () => {
@@ -65,7 +95,6 @@ export default function App() {
         };
     }, [text, userName]);
 
-    // FORMAT TIMESTAMP TO HH:MM FOR MESSAGES
     function formatTime(ts) {
         const d = new Date(ts);
         const hh = String(d.getHours()).padStart(2, '0');
@@ -73,25 +102,43 @@ export default function App() {
         return `${hh}:${mm}`;
     }
 
-    // SUBMIT NAME TO GET STARTED, OPEN CHAT WINDOW WITH INITIAL MESSAGE
+    function getInitials(name) {
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+
+    function getAvatarColor(name) {
+        const colors = [
+            'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
+            'bg-indigo-500', 'bg-red-500', 'bg-yellow-500', 'bg-teal-500'
+        ];
+        const index = name.charCodeAt(0) % colors.length;
+        return colors[index];
+    }
+
     function handleNameSubmit(e) {
         e.preventDefault();
         const trimmed = inputName.trim();
         if (!trimmed) return;
 
-        // join room
         socket.current.emit('joinRoom', trimmed);
-
         setUserName(trimmed);
         setShowNamePopup(false);
+        
+        // Add welcome message
+        const welcomeMsg = {
+            id: Date.now(),
+            sender: 'System',
+            text: `Welcome to the chat, ${trimmed}! 👋`,
+            ts: Date.now(),
+            isSystem: true
+        };
+        setMessages([welcomeMsg]);
     }
 
-    // SEND MESSAGE FUNCTION
     function sendMessage() {
         const t = text.trim();
         if (!t) return;
 
-        // USER MESSAGE
         const msg = {
             id: Date.now(),
             sender: userName,
@@ -99,14 +146,10 @@ export default function App() {
             ts: Date.now(),
         };
         setMessages((m) => [...m, msg]);
-
-        // emit
         socket.current.emit('chatMessage', msg);
-
         setText('');
     }
 
-    // HANDLE ENTER KEY TO SEND MESSAGE
     function handleKeyDown(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -115,107 +158,206 @@ export default function App() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-100 p-4 font-inter">
-            {/* ENTER YOUR NAME TO START CHATTING */}
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 font-sans">
+            {/* Background Pattern */}
+            <div className="fixed inset-0 opacity-10">
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%239C92AC" fill-opacity="0.4"%3E%3Ccircle cx="30" cy="30" r="1.5"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]"></div>
+            </div>
+
+            {/* Name Entry Modal */}
             {showNamePopup && (
-                <div className="fixed inset-0 flex items-center justify-center z-40">
-                    <div className="bg-white rounded-xl shadow-lg max-w-md p-6">
-                        <h1 className="text-xl font-semibold text-black">Enter your name</h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Enter your name to start chatting. This will be used to identify
-                        </p>
-                        <form onSubmit={handleNameSubmit} className="mt-4">
-                            <input
-                                autoFocus
-                                value={inputName}
-                                onChange={(e) => setInputName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-md px-3 py-2 outline-green-500 placeholder-gray-400"
-                                placeholder="Your name (e.g. John Doe)"
-                            />
+                <div className="fixed inset-0 flex items-center justify-center z-50 backdrop-blur-sm bg-black/50">
+                    <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 border border-white/20">
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-800 mb-2">Join the Conversation</h1>
+                            <p className="text-gray-600">Enter your name to start chatting with others</p>
+                        </div>
+                        
+                        <form onSubmit={handleNameSubmit} className="space-y-4">
+                            <div className="relative">
+                                <input
+                                    autoFocus
+                                    value={inputName}
+                                    onChange={(e) => setInputName(e.target.value)}
+                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/20 transition-all duration-200 placeholder-gray-400"
+                                    placeholder="Your display name"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                </div>
+                            </div>
+                            
                             <button
                                 type="submit"
-                                className="block ml-auto mt-3 px-4 py-1.5 rounded-full bg-green-500 text-white font-medium cursor-pointer">
-                                Continue
+                                disabled={!inputName.trim()}
+                                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 px-6 rounded-xl hover:from-purple-600 hover:to-pink-600 focus:ring-4 focus:ring-purple-500/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]">
+                                Start Chatting
                             </button>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* CHAT WINDOW */}
+            {/* Main Chat Interface */}
             {!showNamePopup && (
-                <div className="w-full max-w-2xl h-[90vh] bg-white rounded-xl shadow-md flex flex-col overflow-hidden">
-                    {/* CHAT HEADER */}
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
-                        <div className="h-10 w-10 rounded-full bg-[#075E54] flex items-center justify-center text-white font-semibold">
-                            R
-                        </div>
-                        <div className="flex-1">
-                            <div className="text-sm font-medium text-[#303030]">
-                                Realtime group chat
-                            </div>
-
-                            {typers.length ? (
-                                <div className="text-xs text-gray-500">
-                                    {typers.join(', ')} is typing...
-                                </div>
-                            ) : (
-                                ''
-                            )}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                            Signed in as{' '}
-                            <span className="font-medium text-[#303030] capitalize">
-                                {userName}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* CHAT MESSAGE LIST */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-zinc-100 flex flex-col">
-                        {messages.map((m) => {
-                            const mine = m.sender === userName;
-                            return (
-                                <div
-                                    key={m.id}
-                                    className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                                    <div
-                                        className={`max-w-[78%] p-3 my-2 rounded-[18px] text-sm leading-5 shadow-sm ${
-                                            mine
-                                                ? 'bg-[#DCF8C6] text-[#303030] rounded-br-2xl'
-                                                : 'bg-white text-[#303030] rounded-bl-2xl'
-                                        }`}>
-                                        <div className="break-words whitespace-pre-wrap">
-                                            {m.text}
+                <div className="max-w-4xl mx-auto h-[95vh] flex flex-col">
+                    {/* Chat Container */}
+                    <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 flex flex-col h-full overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-xl border-b border-white/10 p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                    <div className="relative">
+                                        <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-2-2V10a2 2 0 012-2h2m2-4h6a2 2 0 012 2v6a2 2 0 01-2 2h-6l-4 4V8a2 2 0 012-2z" />
+                                            </svg>
                                         </div>
-                                        <div className="flex justify-between items-center mt-1 gap-16">
-                                            <div className="text-[11px] font-bold">{m.sender}</div>
-                                            <div className="text-[11px] text-gray-500 text-right">
-                                                {formatTime(m.ts)}
-                                            </div>
+                                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                    </div>
+                                    
+                                    <div>
+                                        <h1 className="text-xl font-bold text-white">Global Chat</h1>
+                                        <div className="flex items-center space-x-4 text-sm">
+                                            <span className="text-white/70 flex items-center">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                                                {onlineUsers} online
+                                            </span>
+                                            {typers.length > 0 && (
+                                                <span className="text-purple-300 flex items-center animate-pulse">
+                                                    <div className="flex space-x-1 mr-2">
+                                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce"></div>
+                                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                                                    </div>
+                                                    {typers.join(', ')} typing...
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
+                                
+                                <div className="flex items-center space-x-3">
+                                    <div className="text-right">
+                                        <div className="text-white font-medium">{userName}</div>
+                                        <div className="text-white/60 text-sm">You</div>
+                                    </div>
+                                    <div className={`w-10 h-10 ${getAvatarColor(userName)} rounded-full flex items-center justify-center text-white font-semibold shadow-lg`}>
+                                        {getInitials(userName)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-                    {/* CHAT TEXTAREA */}
-                    <div className="px-4 py-3 border-t border-gray-200 bg-white">
-                        <div className="flex items-center justify-between gap-4 border border-gray-200 rounded-full">
-                            <textarea
-                                rows={1}
-                                value={text}
-                                onChange={(e) => setText(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder="Type a message..."
-                                className="w-full resize-none px-4 py-4 text-sm outline-none"
-                            />
-                            <button
-                                onClick={sendMessage}
-                                className="bg-green-500 text-white px-4 py-2 mr-2 rounded-full text-sm font-medium cursor-pointer">
-                                Send
-                            </button>
+                        {/* Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-transparent to-black/5">
+                            {messages.length === 0 && (
+                                <div className="text-center py-12">
+                                    <div className="w-16 h-16 bg-white/10 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                        <svg className="w-8 h-8 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                        </svg>
+                                    </div>
+                                    <p className="text-white/60">No messages yet. Start the conversation!</p>
+                                </div>
+                            )}
+                            
+                            {messages.map((m, index) => {
+                                const mine = m.sender === userName;
+                                const isSystem = m.isSystem;
+                                const showAvatar = !mine && !isSystem && (index === 0 || messages[index - 1].sender !== m.sender);
+                                
+                                if (isSystem) {
+                                    return (
+                                        <div key={m.id} className="flex justify-center">
+                                            <div className="bg-white/10 backdrop-blur-sm text-white/70 px-4 py-2 rounded-full text-sm border border-white/10">
+                                                {m.text}
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                
+                                return (
+                                    <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} group`}>
+                                        <div className={`flex items-end space-x-2 max-w-[75%] ${mine ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                                            {!mine && (
+                                                <div className={`w-8 h-8 ${getAvatarColor(m.sender)} rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}>
+                                                    {getInitials(m.sender)}
+                                                </div>
+                                            )}
+                                            
+                                            <div className={`relative px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border transition-all duration-200 hover:scale-[1.02] ${
+                                                mine 
+                                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white border-white/20 rounded-br-md' 
+                                                    : 'bg-white/90 text-gray-800 border-white/30 rounded-bl-md'
+                                            }`}>
+                                                <div className="break-words whitespace-pre-wrap leading-relaxed">
+                                                    {m.text}
+                                                </div>
+                                                
+                                                <div className={`flex items-center justify-between mt-2 gap-3 text-xs ${mine ? 'text-white/80' : 'text-gray-500'}`}>
+                                                    {!mine && <span className="font-medium">{m.sender}</span>}
+                                                    <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {formatTime(m.ts)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="p-6 bg-white/5 backdrop-blur-xl border-t border-white/10">
+                            <div className="flex items-end space-x-4">
+                                <div className="flex-1 relative">
+                                    <textarea
+                                        rows={1}
+                                        value={text}
+                                        onChange={(e) => setText(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="Type your message..."
+                                        className="w-full resize-none bg-white/90 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-3 pr-12 text-gray-800 placeholder-gray-500 outline-none focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all duration-200 max-h-32"
+                                        style={{
+                                            minHeight: '48px',
+                                            height: 'auto'
+                                        }}
+                                        onInput={(e) => {
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+                                        }}
+                                    />
+                                    
+                                    <div className="absolute right-3 bottom-3 flex items-center space-x-2">
+                                        <button
+                                            type="button"
+                                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                                            title="Add emoji">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <button
+                                    onClick={sendMessage}
+                                    disabled={!text.trim()}
+                                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-3 rounded-2xl hover:from-purple-600 hover:to-pink-600 focus:ring-4 focus:ring-purple-500/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95 shadow-lg">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
